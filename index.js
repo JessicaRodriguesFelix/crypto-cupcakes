@@ -23,9 +23,9 @@ const {MY_SECRET, BASE_URL, AUTH0_CLIENT_ID, AUTH0_AUDIENCE} = process.env;
     authRequired: true,
     auth0Logout: true,
     secret: MY_SECRET,
-    baseURL:  AUTH0_AUDIENCE,
+    baseURL: BASE_URL,
     clientID: AUTH0_CLIENT_ID,
-    issuerBaseURL: BASE_URL,
+    issuerBaseURL: AUTH0_AUDIENCE
 };
   // attach Auth0 OIDC auth router
   app.use(auth(config));
@@ -38,19 +38,35 @@ const {MY_SECRET, BASE_URL, AUTH0_CLIENT_ID, AUTH0_AUDIENCE} = process.env;
 //       secret: MY_SECRET,
 //   })
 // );
-  // create a GET / route handler that sends back Logged in or Logged out
-  app.get('/', (req, res) => {
-    const user = req.oidc.user
-    console.log(user)
-    res.send(req.oidc.isAuthenticated() ? `
-      Welcome, ${user.name} </br>
-      Username: ${user.nickname} </br>
-      Email: ${user.email} </br>
-      Picture: ${user.picture}
-      ` 
-      : 'Logged out');
-  });
 
+app.use(async (req,res,next) => {
+  const user = req.oidc.user
+  //console.log(user)
+   if(user) {
+    const newUser = await User.findOrCreate({
+     where: { username: user.nickname, name: user.name, email: user.email}
+   });
+   //console.log(newUser)
+  }
+    next()
+})
+
+  // create a GET / route handler that sends back Logged in or Logged out
+app.get('/', (req, res) => {
+  res.send(req.oidc.isAuthenticated() ? `
+    <h2 style="text-align: center">My Web App, Inc.</h2>
+    <h2>Welcome, ${req.oidc.user.name}</h2>
+    <p><b>Username: ${req.oidc.user.nickname}</b></p>
+    <p>${req.oidc.user.email}</p>
+    <img src="${req.oidc.user.picture}" alt="${req.oidc.user.name}"> ` 
+    : 
+    'Logged out')
+});
+
+//GET /me Route
+app.get('/me', async (req,res, next) => {
+  
+})
 
 app.get('/cupcakes', async (req, res, next) => {
   try {
