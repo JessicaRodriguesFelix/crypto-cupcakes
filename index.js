@@ -4,6 +4,9 @@ const express = require('express');
 const app = express();
 const morgan = require('morgan');
 const { PORT = 3000 } = process.env;
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET;
 // TODO - require express-openid-connect and destructure auth from it
 const { auth } = require('express-openid-connect');
 
@@ -28,16 +31,7 @@ const {MY_SECRET, BASE_URL, AUTH0_CLIENT_ID, AUTH0_AUDIENCE} = process.env;
     issuerBaseURL: AUTH0_AUDIENCE
 };
   // attach Auth0 OIDC auth router
-  app.use(auth(config));
-
-//   app.use(
-//     auth({
-//       issuerBaseURL: BASE_URL,
-//       baseURL:  AUTH0_AUDIENCE,
-//       clientID: AUTH0_CLIENT_ID,
-//       secret: MY_SECRET,
-//   })
-// );
+app.use(auth(config));
 
 app.use(async (req,res,next) => {
   const user = req.oidc.user
@@ -51,7 +45,7 @@ app.use(async (req,res,next) => {
     next()
 })
 
-  // create a GET / route handler that sends back Logged in or Logged out
+// create a GET / route handler that sends back Logged in or Logged out
 app.get('/', (req, res) => {
   res.send(req.oidc.isAuthenticated() ? `
     <h2 style="text-align: center">My Web App, Inc.</h2>
@@ -65,8 +59,15 @@ app.get('/', (req, res) => {
 
 //GET /me Route
 app.get('/me', async (req,res, next) => {
-  
-})
+   const me = await User.findOne({
+      where: { username: req.oidc.user.nickname },
+      raw: true
+   })
+   if(me){
+    const token = jwt.sign(me, JWT_SECRET, { expiresIn: '1w' });
+    res.send({me, token})
+   }         
+});
 
 app.get('/cupcakes', async (req, res, next) => {
   try {
