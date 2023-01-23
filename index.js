@@ -20,10 +20,29 @@ app.use(express.urlencoded({extended:true}));
 // follow the module instructions: destructure config environment variables from process.env
 const {MY_SECRET, BASE_URL, AUTH0_CLIENT_ID, AUTH0_AUDIENCE} = process.env;
 
+const setUser = async (req, res, next) => {
+  const auth = req.header('Authorization');
+  if (!auth) {
+    next();
+  }
+  else {
+    try {
+      const [,token] = auth.split(' ');
+      //console.log(token)
+      const userObj = jwt.verify(token, JWT_SECRET);
+      req.user = userObj
+      next();
+    } 
+    catch(error) {
+      res.sendStatus(401)
+    } 
+  }
+}
+
 // follow the docs:
   // define the config object
   const config = {
-    authRequired: true,
+    authRequired: false,
     auth0Logout: true,
     secret: MY_SECRET,
     baseURL: BASE_URL,
@@ -45,8 +64,40 @@ app.use(async (req,res,next) => {
     next()
 })
 
+//GET /me Route
+app.get('/me', async (req,res, next) => {
+  const me = await User.findOne({
+     where: { username: req.oidc.user.nickname },
+     raw: true
+  })
+  if(me){
+   const token = jwt.sign(me, JWT_SECRET, { expiresIn: '1w' });
+   //console.log(token)
+   res.send({me, token})
+  }         
+});
+
+app.get('/cupcakes', async (req, res, next) => {
+ try {
+   const cupcakes = await Cupcake.findAll();
+   res.send(cupcakes);
+ } catch (error) {
+   console.error(error);
+   next(error);
+ }
+});
+
+app.post('/cupcakes',setUser, async (req, res, next) => {
+ if(!req.user) {
+   res.status(401).send('You must be logged in to create a cupcake!');
+ } else {
+   const {title, flavor, stars} = req.body
+   const newCupcake = await Cupcake.create({title, flavor, stars, userId: req.user.id })
+   res.send(newCupcake)
+ }
+})
 // create a GET / route handler that sends back Logged in or Logged out
-app.get('/', (req, res) => {
+app.get('/', setUser, (req, res) => {
   res.send(req.oidc.isAuthenticated() ? `
     <h2 style="text-align: center">My Web App, Inc.</h2>
     <h2>Welcome, ${req.oidc.user.name}</h2>
@@ -57,27 +108,8 @@ app.get('/', (req, res) => {
     'Logged out')
 });
 
-//GET /me Route
-app.get('/me', async (req,res, next) => {
-   const me = await User.findOne({
-      where: { username: req.oidc.user.nickname },
-      raw: true
-   })
-   if(me){
-    const token = jwt.sign(me, JWT_SECRET, { expiresIn: '1w' });
-    res.send({me, token})
-   }         
-});
 
-app.get('/cupcakes', async (req, res, next) => {
-  try {
-    const cupcakes = await Cupcake.findAll();
-    res.send(cupcakes);
-  } catch (error) {
-    console.error(error);
-    next(error);
-  }
-});
+
 // error handling middleware
 app.use((error, req, res, next) => {
   console.error('SERVER ERROR: ', error);
